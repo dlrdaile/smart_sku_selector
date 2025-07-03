@@ -1,0 +1,332 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>仓库SKU选品优化 | 数据驱动决策</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Noto Sans SC', sans-serif;
+            background-color: #f0f4f8;
+        }
+        .chart-container {
+            position: relative;
+            width: 100%;
+            max-width: 600px;
+            margin-left: auto;
+            margin-right: auto;
+            height: 300px;
+            max-height: 400px;
+        }
+        @media (min-width: 768px) {
+            .chart-container {
+                height: 350px;
+            }
+        }
+        .kpi-card h3 {
+            color: #004AAD;
+        }
+        .kpi-card .value {
+            color: #0062FF;
+        }
+        .flowchart-node {
+            border: 2px solid #88B7FF;
+            background-color: #BBD6FF;
+            color: #004AAD;
+        }
+        .flowchart-arrow {
+            color: #0062FF;
+            font-size: 2rem;
+            line-height: 1;
+        }
+    </style>
+</head>
+<body class="text-gray-800">
+
+    <header class="bg-[#004AAD] text-white text-center py-12 px-4">
+        <h1 class="text-4xl md:text-5xl font-bold mb-2">仓库SKU选品优化：从经验到科学</h1>
+        <p class="text-lg md:text-xl max-w-3xl mx-auto text-[#BBD6FF]">利用混合整数规划（MILP）模型，将复杂的选品问题转化为数据驱动的最优决策。</p>
+    </header>
+
+    <main class="container mx-auto p-4 md:p-8">
+        
+        <section id="dilemma" class="my-12">
+            <h2 class="text-3xl font-bold text-center mb-4 text-[#004AAD]">第一节：核心困境 - 广度 vs. 深度</h2>
+            <p class="max-w-3xl mx-auto text-center text-gray-600 mb-8">任何库存管理者都面临一个根本性的冲突：是提供尽可能多种类的SKU（广度）以满足多样化需求，还是为少数畅销品储备大量库存（深度）以保证核心订单？真正的最优解在于二者之间的精妙平衡。</p>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-8 max-w-4xl mx-auto">
+                <div class="bg-white p-6 rounded-lg shadow-md text-center border-l-4 border-[#0062FF]">
+                    <div class="text-6xl mb-4">🌐</div>
+                    <h3 class="text-2xl font-bold mb-2 text-[#004AAD]">广度优先策略</h3>
+                    <p class="text-gray-600"><strong>优势：</strong>满足“长尾市场”，客户选择多。<br><strong>风险：</strong>库存分散，畅销品易缺货，运营复杂。</p>
+                </div>
+                <div class="bg-white p-6 rounded-lg shadow-md text-center border-l-4 border-[#88B7FF]">
+                    <div class="text-6xl mb-4">📦</div>
+                    <h3 class="text-2xl font-bold mb-2 text-[#004AAD]">深度优先策略</h3>
+                    <p class="text-gray-600"><strong>优势：</strong>核心产品可用性高，保证大单履行。<br><strong>风险：</strong>产品单一，无法满足利基需求，可能流失客户。</p>
+                </div>
+            </div>
+        </section>
+
+        <hr class="my-16 border-t-2 border-gray-200">
+
+        <section id="solution" class="my-12">
+            <h2 class="text-3xl font-bold text-center mb-4 text-[#004AAD]">第二节：智能决策引擎 - 优化模型如何工作</h2>
+            <p class="max-w-3xl mx-auto text-center text-gray-600 mb-12">传统的ABC分析或销量排名法忽略了SKU间的内在关联和仓库的物理约束。混合整数规划（MILP）模型构建了一个完整的系统视图，能够同时考虑所有因素，找到全局最优解。</p>
+            <div class="bg-white p-8 rounded-lg shadow-lg">
+                <div class="flex flex-col md:flex-row items-center justify-center space-y-4 md:space-y-0 md:space-x-4 text-center">
+                    <div class="flowchart-node p-4 rounded-lg w-full md:w-1/4">
+                        <h4 class="font-bold text-lg">输入数据</h4>
+                        <p class="text-sm">订单需求<br>SKU容量<br>仓库约束</p>
+                    </div>
+                    <div class="flowchart-arrow transform md:-rotate-0">➡️</div>
+                    <div class="bg-[#0062FF] text-white p-6 rounded-full shadow-xl w-40 h-40 flex items-center justify-center flex-col">
+                        <h4 class="font-bold text-lg">Gurobi</h4>
+                        <p class="text-sm">优化求解器</p>
+                    </div>
+                    <div class="flowchart-arrow transform md:-rotate-0">➡️</div>
+                    <div class="flowchart-node p-4 rounded-lg w-full md:w-1/4">
+                        <h4 class="font-bold text-lg">最优方案</h4>
+                        <p class="text-sm">SKU清单<br>托盘分配<br>预期KPI</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+        
+        <hr class="my-16 border-t-2 border-gray-200">
+
+        <section id="levers" class="my-12">
+            <h2 class="text-3xl font-bold text-center mb-4 text-[#004AAD]">第三节：定义成功 - 战略目标的量化</h2>
+            <p class="max-w-3xl mx-auto text-center text-gray-600 mb-12">模型的强大之处在于其目标函数，它通过加权方式平衡“种类满足率”和“箱数满足率”。管理者可以通过调整权重，将抽象的商业战略转化为具体的、可执行的SKU组合方案。</p>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-8 items-center">
+                <div class="bg-white p-6 rounded-lg shadow-md">
+                    <h3 class="text-xl font-bold mb-4 text-[#004AAD]">目标函数权重 (w)</h3>
+                    <p class="text-gray-600 mb-4">调整权重以反映您的业务优先级。高“种类”权重优先客户体验，高“箱数”权重优先运营效率。</p>
+                    <div class="chart-container h-64 md:h-72">
+                        <canvas id="weightsChart"></canvas>
+                    </div>
+                </div>
+                 <div class="space-y-4">
+                    <div class="bg-white p-4 rounded-lg shadow-sm">
+                        <h4 class="font-bold text-lg text-[#0062FF]">选品数量上限 (N)</h4>
+                        <p class="text-sm text-gray-600">定义了产品组合的广度。</p>
+                    </div>
+                    <div class="bg-white p-4 rounded-lg shadow-sm">
+                        <h4 class="font-bold text-lg text-[#0062FF]">总托盘容量 (P_total)</h4>
+                        <p class="text-sm text-gray-600">代表了仓库的物理空间限制。</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <hr class="my-16 border-t-2 border-gray-200">
+
+        <section id="kpis" class="my-12">
+            <h2 class="text-3xl font-bold text-center mb-4 text-[#004AAD]">第四节：优化结果 - 关键绩效指标 (KPIs)</h2>
+             <p class="max-w-3xl mx-auto text-center text-gray-600 mb-12">模型不仅给出一份选品清单，更提供了一系列宏观绩效指标，用于评估方案的整体表现，量化优化带来的价值。</p>
+            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
+                <div class="bg-white p-6 rounded-lg shadow-md text-center kpi-card">
+                    <h3 class="text-xl font-bold">SKU种类满足率</h3>
+                    <p class="text-4xl font-bold value">92.7%</p>
+                    <p class="text-sm text-gray-500">衡量服务广度</p>
+                </div>
+                <div class="bg-white p-6 rounded-lg shadow-md text-center kpi-card">
+                    <h3 class="text-xl font-bold">总箱数满足率</h3>
+                    <p class="text-4xl font-bold value">95.4%</p>
+                    <p class="text-sm text-gray-500">衡量服务深度</p>
+                </div>
+                <div class="bg-white p-6 rounded-lg shadow-md text-center kpi-card">
+                    <h3 class="text-xl font-bold">仓库托盘利用率</h3>
+                    <p class="text-4xl font-bold value">88.0%</p>
+                    <p class="text-sm text-gray-500">衡量空间效率</p>
+                </div>
+            </div>
+            <div class="bg-white p-6 rounded-lg shadow-md">
+                 <h3 class="text-xl font-bold mb-4 text-center text-[#004AAD]">最优组合：托盘分配</h3>
+                 <p class="text-center text-gray-600 mb-4">模型建议为每个选中的SKU分配最优的托盘数量，以最大化整体库存效率。</p>
+                <div class="chart-container">
+                    <canvas id="palletAllocationChart"></canvas>
+                </div>
+            </div>
+        </section>
+
+        <hr class="my-16 border-t-2 border-gray-200">
+
+        <section id="what-if" class="my-12">
+            <h2 class="text-3xl font-bold text-center mb-4 text-[#004AAD]">第五节：战略洞察 - “What-If”情景分析</h2>
+            <p class="max-w-3xl mx-auto text-center text-gray-600 mb-12">优化模型的真正价值在于其战略性。通过系统性地调整权重参数，我们可以绘制出帕累托前沿曲线，它揭示了“种类满足率”和“箱数满足率”两个目标之间的根本性权衡关系，为高层决策提供清晰的战略地图。</p>
+            <div class="bg-white p-6 rounded-lg shadow-md">
+                <h3 class="text-xl font-bold text-center mb-4 text-[#004AAD]">帕累托前沿：权衡的艺术</h3>
+                <p class="text-center text-gray-600 mb-4">曲线上每个点都代表一个最优方案。例如，为了将种类满足率从90%提升到91%，我们需要付出的代价是箱数满足率下降2%。</p>
+                <div class="chart-container h-80 md:h-96">
+                    <canvas id="paretoFrontierChart"></canvas>
+                </div>
+            </div>
+        </section>
+
+    </main>
+
+    <footer class="bg-[#004AAD] text-white text-center p-6 mt-12">
+        <p>基于Gurobi优化的数据驱动型决策支持系统</p>
+    </footer>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+
+            const wrapLabel = (label, maxLength = 16) => {
+                if (label.length <= maxLength) {
+                    return label;
+                }
+                const words = label.split(' ');
+                const lines = [];
+                let currentLine = '';
+                for (const word of words) {
+                    if ((currentLine + ' ' + word).length > maxLength && currentLine.length > 0) {
+                        lines.push(currentLine);
+                        currentLine = word;
+                    } else {
+                        currentLine += (currentLine.length === 0 ? '' : ' ') + word;
+                    }
+                }
+                lines.push(currentLine);
+                return lines;
+            };
+
+            const tooltipTitleCallback = (tooltipItems) => {
+                const item = tooltipItems[0];
+                let label = item.chart.data.labels[item.dataIndex];
+                if (Array.isArray(label)) {
+                    return label.join(' ');
+                }
+                return label;
+            };
+
+            const sharedChartOptions = {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        labels: {
+                            color: '#374151'
+                        }
+                    },
+                    tooltip: {
+                        callbacks: {
+                            title: tooltipTitleCallback
+                        }
+                    }
+                },
+                scales: {
+                    y: {
+                        ticks: { color: '#374151' },
+                        grid: { color: '#e5e7eb' }
+                    },
+                    x: {
+                        ticks: { color: '#374151' },
+                        grid: { display: false }
+                    }
+                }
+            };
+            
+            const brilliantBlues = ['#0062FF', '#004AAD', '#88B7FF', '#BBD6FF'];
+
+            new Chart(document.getElementById('weightsChart'), {
+                type: 'doughnut',
+                data: {
+                    labels: ['种类满足率 (wv)', '箱数满足率 (wc)'],
+                    datasets: [{
+                        data: [50, 50],
+                        backgroundColor: [brilliantBlues[0], brilliantBlues[2]],
+                        borderColor: '#f0f4f8',
+                        borderWidth: 4,
+                        hoverOffset: 4
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { position: 'top', labels: { color: '#374151' } },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    return `${context.label}: ${context.raw}%`;
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+
+            const rawLabels = ['高需求畅销品A', '关键配件SKU B', '促销捆绑商品 C', '长尾低频SKU D', '季节性产品 E', '高利润单品 F', '新品 G', '核心原料 H', '高退货风险品 I', '大体积泡货 J'];
+            const wrappedLabels = rawLabels.map(label => wrapLabel(label));
+            
+            new Chart(document.getElementById('palletAllocationChart'), {
+                type: 'bar',
+                data: {
+                    labels: wrappedLabels,
+                    datasets: [{
+                        label: '分配托盘数',
+                        data: [15, 12, 10, 8, 7, 6, 5, 4, 3, 2],
+                        backgroundColor: brilliantBlues[0],
+                        borderColor: brilliantBlues[1],
+                        borderWidth: 1,
+                        borderRadius: 4
+                    }]
+                },
+                options: sharedChartOptions
+            });
+
+            new Chart(document.getElementById('paretoFrontierChart'), {
+                type: 'line',
+                data: {
+                    datasets: [{
+                        label: '帕累托前沿',
+                        data: [
+                            { x: 85, y: 98 },
+                            { x: 88, y: 97 },
+                            { x: 90, y: 96 },
+                            { x: 92, y: 95.5 },
+                            { x: 93, y: 94 },
+                            { x: 94, y: 92 },
+                            { x: 95, y: 89 },
+                        ],
+                        borderColor: brilliantBlues[0],
+                        backgroundColor: 'rgba(0, 98, 255, 0.1)',
+                        fill: true,
+                        tension: 0.3,
+                        pointBackgroundColor: brilliantBlues[1],
+                        pointRadius: 5,
+                        pointHoverRadius: 7
+                    }]
+                },
+                options: {
+                    ...sharedChartOptions,
+                     scales: {
+                        y: {
+                           ...sharedChartOptions.scales.y,
+                            title: {
+                                display: true,
+                                text: '总箱数满足率 (%)',
+                                color: '#374151'
+                            }
+                        },
+                        x: {
+                           ...sharedChartOptions.scales.x,
+                            type: 'linear',
+                            position: 'bottom',
+                            title: {
+                                display: true,
+                                text: 'SKU种类满足率 (%)',
+                                color: '#374151'
+                            }
+                        }
+                    }
+                }
+            });
+        });
+    </script>
+</body>
+</html>
