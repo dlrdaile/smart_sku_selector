@@ -1,36 +1,38 @@
 import json
 import os
 import time
+from typing import Optional, List
+from pandarallel import pandarallel
 
 import pandas as pd
 import numpy as np
 import gurobipy as gp
 from gurobipy import GRB
-from logging import getLogger
-
-logger = getLogger(__name__)
+from loguru import logger
 
 
-class SKUSelectionOptimizer:
-    def __init__(self, config=None):
+class FineSelectProcessor:
+    default_config = {
+        'max_sku_count': 200,  # 最大选品数量N
+        'weight': 0.5,  # 优化目标权重W
+        'time_limit': 600,  # 求解时间限制(秒)
+        'mip_gap': 0.01,  # MIP Gap
+        'pallet_count': 200,  # 托盘数量
+        'output_dir': 'output'  # 输出目录
+    }
+
+    def __init__(self, config:dict=None,is_parallel:bool=True):
         """
         初始化SKU选品优化器
 
         参数:
             config (dict): 配置参数，如果为None则使用默认配置
         """
-        # 默认配置
-        self.default_config = {
-            'max_sku_count': 200,  # 最大选品数量N
-            'weight': 0.5,  # 优化目标权重W
-            'time_limit': 600,  # 求解时间限制(秒)
-            'mip_gap': 0.01,  # MIP Gap
-            'pallet_count': 200,  # 托盘数量
-            'output_dir': 'output'  # 输出目录
-        }
 
         # 使用提供的配置或默认配置
-        self.config = config if config else self.default_config
+        self.config = self.default_config
+        if config is not None:
+            self.config.update(config)
 
         # 初始化数据结构
         self.sku_data = None  # SKU数据
@@ -45,14 +47,23 @@ class SKUSelectionOptimizer:
         self.z = None  # 订单-SKU需求指示变量
 
         # 初始化结果
-        self.selected_skus = None
+        self.selected_skus:Optional[List[str]] = None
         self.sku_pallet_assignment = None
         self.objective_value = None
         self.solution_time = None
-
+        self.is_parallel = False
         # 创建输出目录
         if not os.path.exists(self.config['output_dir']):
             os.makedirs(self.config['output_dir'])
+
+    def update_config(self,config):
+        """
+        更新配置参数
+        参数:
+            config (dict): 新的配置参数
+        """
+        self.config.update(config)
+        logger.info("配置已更新")
 
     def load_data(self, sku_data, order_data, pallet_file=None):
         """
@@ -66,14 +77,16 @@ class SKUSelectionOptimizer:
         logger.info("正在加载数据...")
 
         # 加载SKU数据
-        if self.sku_data is pd.DataFrame:
+        if type(sku_data) is pd.DataFrame:
             self.sku_data = sku_data
         else:
-            self.sku_data = pd.read_csv(sku_data)
+            self.sku_data = pd.DataFrame([[sku.id for sku in sku_data],],index=['sku_id']).T
         logger.info(f"已加载 {len(self.sku_data)} 个SKU")
 
         # 加载订单数据
-        if self.order_data is pd.DataFrame:
+        if order_data is None:
+            raise ValueError("order_data cannot be None")
+        if type(order_data) is pd.DataFrame:
             self.order_data = order_data
         else:
             self.order_data = pd.read_csv(order_data)
@@ -115,22 +128,26 @@ class SKUSelectionOptimizer:
         #         demand_data[sku_id] = 0
 
         self.demand_data = demand_data
+
         logger.info(f"需求数据处理完成，共 {len(demand_data)} 个订单")
 
         # 计算每个SKU的总需求量和出现频率
         sku_total_demand = self.demand_data.sum()
         sku_frequency = (self.demand_data > 0).sum()
-
-        # 将总需求量和频率添加到SKU数据中
-        sku_stats = pd.DataFrame({
-            'sku_id': sku_total_demand.index,
-            'total_demand': sku_total_demand.values,
-            'frequency': sku_frequency.values
-        })
-
+        sku_stats = sku_total_demand.to_frame().merge(sku_frequency.to_frame(), on='sku_id',how='left')
+        # sku_stats = sku_stats.join(sku_frequency, on='sku_id', how='left')
+        sku_stats.columns = ['total_demand', 'frequency']
         self.sku_data = self.sku_data.merge(sku_stats, on='sku_id', how='left')
-        self.sku_data['total_demand'] = self.sku_data['total_demand'].fillna(0)
-        self.sku_data['frequency'] = self.sku_data['frequency'].fillna(0)
+        self.sku_data['total_demand'].fillna(0,inplace=True)
+        self.sku_data['frequency'].fillna(0,inplace=True)
+        self.sku_data.reset_index(inplace=True)
+
+        # 根据sku数据，对demand_data的column进行补充，保证demand包含所有sku_data的数据
+        sku_data_ids = set(self.sku_data['sku_id'].tolist()) - set(self.demand_data.columns.tolist())
+        if sku_data_ids:
+            for sku_id in sku_data_ids:
+                self.demand_data[sku_id] = 0
+        self.demand_data = self.demand_data.T
 
         return self
 
@@ -142,29 +159,21 @@ class SKUSelectionOptimizer:
         self.model = gp.Model("SKU_Selection_Optimization")
 
         # 获取集合
-        I = self.sku_data['sku_id'].tolist()  # SKU集合
-        J = self.demand_data.index.tolist()  # 订单集合
-        P = self.pallet_data['pallet_id'].tolist()  # 托盘集合
+        I = list(set(self.sku_data['sku_id'].tolist()))  # SKU集合
+        J = list(set(self.demand_data.index.tolist()))  # 订单集合
+        P = list(set(self.pallet_data['pallet_id'].tolist()))  # 托盘集合
 
         # 创建决策变量
         logger.info("正在创建决策变量...")
 
         # x_i: 是否选择SKU i
-        self.x = self.model.addVars(I, vtype=GRB.BINARY, name="x")
+        self.x = pd.Series(self.model.addVars(I, vtype=GRB.BINARY, name="x"))
 
         # y_ip: 是否在托盘p上存放SKU i
         self.y = self.model.addVars([(i, p) for i in I for p in P], vtype=GRB.BINARY, name="y")
 
         # z_ij: 订单j是否需要SKU i
-        self.z = {}
-        for j in J:
-            for i in I:
-                demand = self.demand_data.loc[j, i]
-                # 如果需求大于0，则z_ij = 1，否则z_ij = 0
-                if demand > 0:
-                    self.z[(i, j)] = 1
-                else:
-                    self.z[(i, j)] = 0
+        self.z = (self.demand_data > 0).astype(int)
 
         # 添加约束条件
         logger.info("正在添加约束条件...")
@@ -200,36 +209,29 @@ class SKUSelectionOptimizer:
 
         # 5. 设置优化目标
         logger.info("正在设置优化目标...")
-
+        def agg_order_data(order_data:pd.Series):
+            sku_ids = order_data[order_data > 0].index.tolist()
+            return (order_data.loc[sku_ids] * self.x.loc[sku_ids]).sum()
         # 计算每个订单的SKU种类满足率
-        T1_terms = []
-        for j in J:
-            # 订单j中需要的SKU总数
-            total_skus_needed = sum(1 for i in I if self.z[(i, j)] > 0)
+        x_selected_sku = self.x.index
 
-            if total_skus_needed > 0:
-                # 订单j中被选中的SKU数量
-                selected_skus = gp.quicksum(self.x[i] for i in I if self.z[(i, j)] > 0)
-
-                # 订单j的SKU种类满足率
-                T1_terms.append(selected_skus / total_skus_needed)
-
-        T1 = gp.quicksum(T1_terms) / len(J) if J else 0
+        total_skus_needed = self.z.sum(axis=0)
+        # selected_skus = (self.z.loc[x_selected_sku].apply(lambda j: j * self.x)).sum(axis=0)
+        if self.is_parallel:
+            selected_skus = self.z.loc[x_selected_sku,:].parallel_apply(agg_order_data)
+        else:
+            selected_skus = self.z.loc[x_selected_sku,:].apply(agg_order_data)
+        T1 = (selected_skus / total_skus_needed).sum() / len(J)
 
         # 计算每个订单的箱数满足率
-        T2_terms = []
-        for j in J:
-            # 订单j需要的总箱数
-            total_boxes_needed = sum(self.demand_data.loc[j, i] for i in I)
-
-            if total_boxes_needed > 0:
-                # 订单j中被选中的SKU的箱数
-                selected_boxes = gp.quicksum(self.demand_data.loc[j, i] * self.x[i] for i in I)
-
-                # 订单j的箱数满足率
-                T2_terms.append(selected_boxes / total_boxes_needed)
-
-        T2 = gp.quicksum(T2_terms) / len(J) if J else 0
+        demand_data = self.demand_data
+        total_boxes_needed = demand_data.sum(axis=0)
+        # selected_boxes =(demand_data.loc[x_selected_sku].apply(lambda j: j * self.x)).sum(axis=0)
+        if self.is_parallel:
+            selected_boxes = demand_data.loc[x_selected_sku].parallel_apply(agg_order_data)
+        else:
+            selected_boxes = demand_data.loc[x_selected_sku].apply(agg_order_data)
+        T2 = (selected_boxes / total_boxes_needed).sum() / len(J)
 
         # 总目标：最大化加权满足率
         W = self.config['weight']
@@ -276,7 +278,7 @@ class SKUSelectionOptimizer:
             logger.info(f"选中 {len(self.selected_skus)} 个SKU")
 
             # 计算订单满足率
-            self._calculate_order_fulfillment()
+            # self._calculate_order_fulfillment()
 
             return True
         else:
@@ -376,7 +378,7 @@ if __name__ == '__main__':
         'pallet_count': 220,
         'output_dir': 'results'
     }
-    optimizer = SKUSelectionOptimizer(config)
+    optimizer = FineSelectProcessor(config)
     # 加载数据
     optimizer.load_data(
         sku_data=None,

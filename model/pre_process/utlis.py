@@ -54,5 +54,16 @@ def aggregate_data(df: pd.DataFrame):
         'sku_qty_in_cs_pairs': sku_qty_in_cs_pairs,
         'pick_times': len(from_location_path),
         'sku_nums': len(sku_set),
+        'date': pd.to_datetime(work_day_start_time).date(),
     }
     return pd.Series(aggregate_data)
+
+
+def expand_dict_to_frame(df):
+    data = df.iloc[0]['sku_qty_in_cs_pairs']
+    if type(data) == str:
+        data = eval(data)
+    new_df = pd.DataFrame(data.items(), columns=['sku_id', 'quantity'])
+    new_df['date'] = df.iloc[0]['date']
+    new_df['work_day_start_time'] = df.iloc[0]['work_day_start_time']
+    return new_df

@@ -4,10 +4,8 @@ from utils.string import fuzzy_match_str_list
 import numpy as np
 # 导入 pandarallel 并初始化
 from pandarallel import pandarallel
-from model.pre_process.utlis import aggregate_data
-from logging import getLogger
-
-logger = getLogger(__name__)
+from model.pre_process.utlis import aggregate_data,expand_dict_to_frame
+from loguru import logger
 
 
 def label_workdays(group):
@@ -103,11 +101,14 @@ class PrimerDataPreProcess(object):
     duplicate_columns = ['load_number', 'to_load_number', 'item_number', 'transaction_date', 'quantity',
                          'order_number']
 
-    def __init__(self, primer_data_path_list: list[Path], sku_data_path: Path) -> None:
+    def __init__(self, primer_data_path_list: list[Path], sku_data_path: Path,is_parallel=True) -> None:
         self.primer_data_path_list = primer_data_path_list
         self.sku_data_path = sku_data_path
+        self.is_parallel = is_parallel
         self.primer_data_df = None
         self.sku_data_df = None
+        self.last_date = None
+        self.fine_tune_structure_df = None
 
     def run(self) -> pd.DataFrame:
         # 1.读取数据
@@ -143,6 +144,10 @@ class PrimerDataPreProcess(object):
         # 8. 数据聚合
         logger.info("start aggregate data -------")
         self.primer_data_df = self.aggregate_data(self.primer_data_df)
+
+        self.last_date = self.primer_data_df['date'].max()
+
+        self.fine_tune_structure_df = self.transfer_to_fine_select_data_structure(self.primer_data_df)
 
         return self.primer_data_df
 
@@ -241,23 +246,26 @@ class PrimerDataPreProcess(object):
         stat_label_df = df.groupby(['unique_label_index'], as_index=False, group_keys=False).apply(
             get_need_stat_task)
         need_stat_label_df = stat_label_df.query('is_need_stat == True and is_pick == True')
-        aggregated_df = need_stat_label_df.groupby(['unique_label_index'], as_index=False,
-                                                   group_keys=False).parallel_apply(
-            aggregate_data)
+        if self.is_parallel:
+            aggregated_df = need_stat_label_df.groupby(['unique_label_index'], as_index=False,
+                                                       group_keys=False).parallel_apply(
+                aggregate_data)
+        else:
+            aggregated_df = need_stat_label_df.groupby(['unique_label_index'], as_index=False,
+                                                       group_keys=False).apply(
+                aggregate_data)
 
         return aggregated_df
 
     def transfer_to_fine_select_data_structure(self, aggregated_df: pd.DataFrame) -> pd.DataFrame:
         df: pd.DataFrame = aggregated_df.copy()
-
-        def expand_dict_to_frame(df):
-            data = eval(df.iloc[0]['sku_qty_in_cs_pairs'])
-            new_df = pd.DataFrame(data.items(), columns=['sku_id', 'quantity'])
-            return new_df
-
-        df2 = df.groupby(df.index).apply(expand_dict_to_frame)
+        if self.is_parallel:
+            df2 = df.groupby(df.index).parallel_apply(expand_dict_to_frame)
+        else:
+            df2 = df.groupby(df.index).apply(expand_dict_to_frame)
         df2.reset_index(level=0, inplace=True)
-        df2.rename(columns={'unique_label_index': 'order_id'}, inplace=True)
+        df2.index = np.arange(len(df2))
+        df2.rename(columns={'level_0': 'order_id'}, inplace=True)
 
         return df2
 
@@ -266,11 +274,11 @@ if __name__ == '__main__':
     from warnings import filterwarnings
 
     filterwarnings('ignore')
-    pandarallel.initialize(progress_bar=True)
+    pandarallel.initialize(progress_bar=True,use_memory_fs=True)
     print("start run -------")
-    data_path = Path(r'/data/raw_data/FY2425 KCP/8月')
+    data_path = Path(r'D:\Code\Python\sku_select_optimize\data\run_data')
     primer_data_path_list = list(data_path.rglob('*.csv'))
-    sku_data_path = Path(r'/data/raw_data/SKU_MD_0509.xlsx')
+    sku_data_path = Path(r'D:\Code\Python\sku_select_optimize\data\raw_data\SKU_MD_0509.xlsx')
     pre_processor = PrimerDataPreProcess(primer_data_path_list, sku_data_path)
     primer_data_df = pre_processor.run()
     fine_tune_structure_df = pre_processor.transfer_to_fine_select_data_structure(primer_data_df)
