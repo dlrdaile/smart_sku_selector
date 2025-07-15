@@ -160,7 +160,7 @@ class FineSelectProcessor:
 
         # 获取集合
         I = list(set(self.sku_data['sku_id'].tolist()))  # SKU集合
-        J = list(set(self.demand_data.index.tolist()))  # 订单集合
+        J = list(set(self.demand_data.columns.tolist()))  # 订单集合
         P = list(set(self.pallet_data['pallet_id'].tolist()))  # 托盘集合
 
         # 创建决策变量

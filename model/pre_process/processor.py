@@ -230,7 +230,6 @@ class PrimerDataPreProcess(object):
         unique_df['index'] = np.arange(len(unique_df)) + 1
         unique_df['unique_label'] = unique_df.apply(
             lambda x: f"{x['user_id']}_{x['workday_id']}_{x['task_id']}_{x['task_load_number']}", axis=1)
-
         unique_label_map_dict = unique_df.set_index('unique_label')['index'].to_dict()
 
         task_label_df['unique_label'] = task_label_df.apply(

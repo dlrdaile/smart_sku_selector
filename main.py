@@ -1,3 +1,4 @@
+import datetime
 import time
 from typing import Optional
 from pathlib import Path
@@ -100,9 +101,9 @@ def run_optimization_cycle(state: SystemState, pre_processor: PrimerDataPreProce
     logger.info("4. Evaluating new selection...")
     evaluate_config = default_config.get("evaluate_config", {})
     evaluator = Evaluator(pre_processor.fine_tune_structure_df, evaluate_config)
-
-    old_profit = evaluator.simulate_warehouse_efficiency(state.previous_selection)
-    new_profit = evaluator.simulate_warehouse_efficiency(new_selection_result)
+    now_time_str = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+    old_profit = evaluator.simulate_warehouse_efficiency(state.previous_selection,"old",prefix=now_time_str)
+    new_profit = evaluator.simulate_warehouse_efficiency(new_selection_result,"new",prefix=now_time_str)
     changeover_cost = evaluator.calculate_changeover_cost(state.previous_selection, new_selection_result)
     new_selection_result.profit = new_profit
 

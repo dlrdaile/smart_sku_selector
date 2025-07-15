@@ -10,7 +10,7 @@ class Config:
     SKU_OPTIMIZER_CONFIG: dict = {
         "rough_config": {
             "smart_sku_file_path" : r"D:\Code\Python\sku_select_optimize\data\raw_data\2025 618\4567月Smart SKU带Overall Score.csv", # smart sku分类结果文件路径
-            "alpha" : 0.3, # 指数平滑参数
+            "alpha" : 0.1, # 指数平滑参数
             "freq_weight" : 0.4, # 频次权重
             "cooc_weight" : 0.3, # 共现权重
             "quant_weight" : 0.3, # 数量权重
@@ -29,6 +29,7 @@ class Config:
             "qty_comp_weight": 0.6,
             "switch_sku_time_use": 20,
             "switch_sku_parallel": 8,
+            "simulate_order_data_cache_dir_path": r"D:\Code\Python\sku_select_optimize\data\fulfillable_parts",
         }
     }
 
@@ -45,7 +46,7 @@ class Config:
 
     }
 
-    IS_DEBUG = False
+    IS_DEBUG = True
 
     DATA_STORAGE_PATH = "./data/storage.json"
     # 归档路径

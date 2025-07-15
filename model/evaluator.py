@@ -4,7 +4,7 @@ import pandas as pd
 from loguru import logger
 from schema.models import SelectionResult
 import random
-
+from pathlib import Path
 
 class Evaluator:
     """Evaluates the profitability and costs of selection results."""
@@ -19,6 +19,8 @@ class Evaluator:
         self.qty_comp_weight = config.get('qty_comp_weight', 0.5)
         self.switch_sku_time_use = config.get('switch_sku_time_use', 30)
         self.switch_sku_parallel = config.get('switch_sku_parallel', 10)
+        self.simulate_order_data_cache_dir_path = Path(config.get("simulate_order_data_cache_dir_path", "./data/fulfillable_parts"))
+        self.simulate_order_data_cache_dir_path.mkdir(parents=True, exist_ok=True)
 
     def calculate_changeover_cost(self, old_selection: Optional[SelectionResult],
                                   new_selection: SelectionResult) -> float:
@@ -41,7 +43,7 @@ class Evaluator:
         changeover_cost = len(replaced_skus) * self.switch_sku_time_use / 3600 / self.switch_sku_parallel  # 假设一个换品需要30分钟，并发度是5
         return changeover_cost / self.date_num
 
-    def simulate_warehouse_efficiency(self, selection: SelectionResult) -> float:
+    def simulate_warehouse_efficiency(self, selection: SelectionResult,data_type:str = "new",prefix="") -> float:
         """
         Calculates warehouse efficiency by simulating order fulfillment.
 
@@ -63,24 +65,29 @@ class Evaluator:
         if len(affected_order_ids) == 0:
             return 0.0
 
-        original_affected_orders = self.order_df[self.order_df['order_id'].isin(affected_order_ids)].copy()
 
         # 1. Calculate the original total quantity and SKU variety for each affected order.
         # This serves as the baseline for calculating completion rates.
-        original_order_agg = original_affected_orders.groupby('order_id').agg(
+        original_order_agg = self.order_df.groupby('order_id').agg(
             original_quantity=('quantity', 'sum'),
             original_sku_count=('sku_id', 'nunique'),
             date=('date', 'first')
         ).reset_index()
 
         # 2. Determine the parts of the orders that can be fulfilled with the selected SKUs.
-        fulfillable_parts = original_affected_orders[original_affected_orders['sku_id'].isin(selected_sku_ids)]
+        original_affected_orders = self.order_df[self.order_df['order_id'].isin(affected_order_ids)].copy()
+        fulfillable_parts:pd.DataFrame = original_affected_orders[original_affected_orders['sku_id'].isin(selected_sku_ids)]
 
+        fulfillable_parts_file = self.simulate_order_data_cache_dir_path / f"{prefix}_fulfillable_parts_{data_type}.xlsx"
+        fulfillable_parts.sort_values(by="order_id").to_excel(fulfillable_parts_file, index=False)
+        logger.info(f"save {fulfillable_parts_file} successfully")
         # 3. Simulate the completion of these fulfillable parts.
+        # todo: wait for simulate result
         simulated_complete_df = self.simulate_order_completion(fulfillable_parts)
 
         # 4. Aggregate the simulated completion results by order.
         if not simulated_complete_df.empty:
+            # todo: 此处计算的时候考虑对日期坐做一下处理
             simulated_agg = simulated_complete_df.groupby('order_id').agg(
                 completed_quantity=('quantity', 'sum'),
                 completed_sku_count=('sku_id', 'nunique')
