@@ -109,7 +109,7 @@ class PrimerDataPreProcess(object):
         self.sku_data_df = None
         self.last_date = None
         self.fine_tune_structure_df = None
-
+        self.order_id_key = "unique_label"
     def run(self) -> pd.DataFrame:
         # 1.读取数据
         logger.info("start run -------")
@@ -242,15 +242,15 @@ class PrimerDataPreProcess(object):
 
     def aggregate_data(self, primer_data_df):
         df = primer_data_df.copy()
-        stat_label_df = df.groupby(['unique_label_index'], as_index=False, group_keys=False).apply(
+        stat_label_df = df.groupby([self.order_id_key], as_index=False, group_keys=False).apply(
             get_need_stat_task)
         need_stat_label_df = stat_label_df.query('is_need_stat == True and is_pick == True')
         if self.is_parallel:
-            aggregated_df = need_stat_label_df.groupby(['unique_label_index'], as_index=False,
+            aggregated_df = need_stat_label_df.groupby([self.order_id_key], as_index=False,
                                                        group_keys=False).parallel_apply(
                 aggregate_data)
         else:
-            aggregated_df = need_stat_label_df.groupby(['unique_label_index'], as_index=False,
+            aggregated_df = need_stat_label_df.groupby([self.order_id_key], as_index=False,
                                                        group_keys=False).apply(
                 aggregate_data)
 
@@ -259,12 +259,12 @@ class PrimerDataPreProcess(object):
     def transfer_to_fine_select_data_structure(self, aggregated_df: pd.DataFrame) -> pd.DataFrame:
         df: pd.DataFrame = aggregated_df.copy()
         if self.is_parallel:
-            df2 = df.groupby(df.index).parallel_apply(expand_dict_to_frame)
+            df2 = df.groupby(self.order_id_key).parallel_apply(expand_dict_to_frame)
         else:
-            df2 = df.groupby(df.index).apply(expand_dict_to_frame)
+            df2 = df.groupby(self.order_id_key).apply(expand_dict_to_frame)
         df2.reset_index(level=0, inplace=True)
         df2.index = np.arange(len(df2))
-        df2.rename(columns={'level_0': 'order_id'}, inplace=True)
+        df2.rename(columns={self.order_id_key: 'order_id'}, inplace=True)
 
         return df2
 

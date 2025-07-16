@@ -3,6 +3,7 @@ import time
 from typing import Optional
 from pathlib import Path
 
+import pandas as pd
 import ray
 
 from store.data_store import DataStore
@@ -72,7 +73,7 @@ def tune_once_optimization(config, pre_processor, pre_state):
     return {"max_score": optimizer.selection_result.score}
 
 
-def run_optimization_cycle(state: SystemState, pre_processor: PrimerDataPreProcess):
+def run_optimization_cycle(state: SystemState, pre_processor: PrimerDataPreProcess) -> Optional[SystemState]:
     """Runs one full cycle of the SKU optimization process."""
     default_config = deepcopy(settings.SKU_OPTIMIZER_CONFIG)
     state = deepcopy(state)
@@ -97,13 +98,21 @@ def run_optimization_cycle(state: SystemState, pre_processor: PrimerDataPreProce
     new_selection_result = optimizer.selection_result
     if new_selection_result is None:
         return None
+    state.previous_score = optimizer.new_scores_df['combined_score']
+    state.previous_score_time = pre_processor.last_date
     # 4. Evaluation
     logger.info("4. Evaluating new selection...")
     evaluate_config = default_config.get("evaluate_config", {})
     evaluator = Evaluator(pre_processor.fine_tune_structure_df, evaluate_config)
     now_time_str = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-    old_profit = evaluator.simulate_warehouse_efficiency(state.previous_selection,"old",prefix=now_time_str)
-    new_profit = evaluator.simulate_warehouse_efficiency(new_selection_result,"new",prefix=now_time_str)
+    old_profit, is_full_load = evaluator.simulate_warehouse_efficiency(state.previous_selection, "old",
+                                                                       prefix=now_time_str)
+    # 当模拟仿真全部满负载时，说明旧的选品方案已经达到仓库运行的上限了，不需要再优化了
+    if is_full_load:
+        logger.info("旧的选品方案已经达到仓库运行的上限了，不需要再优化了")
+        return state
+
+    new_profit, is_full_load = evaluator.simulate_warehouse_efficiency(new_selection_result, "new", prefix=now_time_str)
     changeover_cost = evaluator.calculate_changeover_cost(state.previous_selection, new_selection_result)
     new_selection_result.profit = new_profit
 
@@ -112,8 +121,6 @@ def run_optimization_cycle(state: SystemState, pre_processor: PrimerDataPreProce
     logger.info(f"   - Changeover Cost: {changeover_cost:.5f}")
 
     # 5. Decision
-    state.previous_score = optimizer.new_scores_df['combined_score']
-    state.previous_score_time = pre_processor.last_date
     logger.info("5. Making decision...")
     if evaluator.should_switch(old_profit, new_profit, changeover_cost):
         logger.info("   -> Decision: Switch to the new selection.")
@@ -123,8 +130,8 @@ def run_optimization_cycle(state: SystemState, pre_processor: PrimerDataPreProce
 
     # 6. Update and Save State
     logger.info("6. Saving state...")
-    DataStore.save_state(state)
     logger.info("--- Optimization Cycle Complete ---")
+    return state
 
 
 def main():
@@ -149,7 +156,9 @@ def main():
                 pre_processor.run()
                 # Trigger the optimization cycle
                 state = DataStore.load_state()
-                run_optimization_cycle(state, pre_processor)
+                state = run_optimization_cycle(state, pre_processor)
+                if state is not None:
+                    DataStore.save_state(state)
             except Exception as e:
                 if e is KeyboardInterrupt:
                     raise e

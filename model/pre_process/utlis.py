@@ -25,6 +25,7 @@ def aggregate_data(df: pd.DataFrame):
     work_day_time_diff = work_day_end_time - work_day_start_time
     work_day_time_diff = work_day_time_diff.total_seconds()
     unique_label_index = df.iloc[0]['unique_label_index']
+    unique_label = df.iloc[0]['unique_label']
     sku_qty_in_cs_pairs = df.groupby('item_number')['qty_in_cs'].sum()
     sku_qty_in_cs_pairs = sku_qty_in_cs_pairs.to_dict()
     sku_set = list(set(item_number_path))
@@ -37,6 +38,7 @@ def aggregate_data(df: pd.DataFrame):
         'work_day_end_time': work_day_end_time,
         'work_day_time_diff': work_day_time_diff,
         'unique_label_index': unique_label_index,
+        'unique_label': unique_label,
         'activity_code_path': activity_code_path,
         'operation_code_path': operation_code_path,
         'item_number_path': item_number_path,
