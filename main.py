@@ -77,22 +77,26 @@ def run_optimization_cycle(state: SystemState, pre_processor: PrimerDataPreProce
     """Runs one full cycle of the SKU optimization process."""
     default_config = deepcopy(settings.SKU_OPTIMIZER_CONFIG)
     state = deepcopy(state)
-    # ray.init(include_dashboard=False)
-    # tuner = tune.Tuner(
-    #     lambda config: tune_once_optimization(config,pre_processor,state),
-    #     tune_config=tune.TuneConfig(
-    #         num_samples=20,
-    #         scheduler=ASHAScheduler(metric="max_score", mode="max"),
-    #     ),
-    #     param_space=settings.SEARCH_SPACE,
-    # )
-    # results = tuner.fit()
-    # best_result = results.get_best_result("max_score", mode="max")
-    # logger.info("\n--- Finished Optimization Cycle ---")
-    # logger.info(f"best config: {best_result.config}")
+    # 如果非debug模式，则开启ray超参数搜索
+    if not settings.IS_DEBUG:
+        ray.init(include_dashboard=False)
+        tuner = tune.Tuner(
+            lambda config: tune_once_optimization(config,pre_processor,state),
+            tune_config=tune.TuneConfig(
+                num_samples=20, # 搜寻的参数组合数量
+                scheduler=ASHAScheduler(metric="max_score", mode="max"), # best config 参考指标
+                trial_dirname_creator= lambda trial: f"{trial.trial_id}"
+            ),
+            param_space=settings.SEARCH_SPACE, # 搜索空间配置
+        )
+        results = tuner.fit()
+        best_result = results.get_best_result("max_score", mode="max")
+        logger.info("\n--- Finished Optimization Cycle ---")
+        logger.info(f"best config: {best_result.config}")
 
-    # best_config = best_result.config
-    best_config = None
+        best_config = best_result.config
+    else:
+        best_config = None
     # 3. New Selection
     optimizer = run_once_optimization(best_config, pre_processor, state)
     new_selection_result = optimizer.selection_result
@@ -173,7 +177,6 @@ if __name__ == "__main__":
     from pandarallel import pandarallel
 
     filterwarnings('ignore')
-    ray.init(include_dashboard=False)
     if not settings.IS_DEBUG:
         pandarallel.initialize(progress_bar=True)
     main()
