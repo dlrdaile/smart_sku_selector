@@ -1,4 +1,5 @@
 import datetime
+import time
 from typing import Optional,Tuple
 
 import pandas as pd
@@ -46,6 +47,75 @@ class Evaluator:
         changeover_cost = len(
             replaced_skus) * self.switch_sku_time_use / 3600 / self.switch_sku_parallel  # 假设一个换品需要30分钟，并发度是5
         return changeover_cost / self.date_num
+    def calc_actual_complete_rate(self, selection: SelectionResult) -> Tuple[float,bool]:
+        """
+        Calculates the actual completion rate of the selection.
+
+        This method calculates the actual completion rate of the selection by
+        simulating order fulfillment. It calculates quantity and category (SKU)
+        completion rates for each affected order, aggregates these into daily
+        averages, and then computes a final weighted efficiency score.
+
+        This corresponds to '优化仓库布局和设备执行效率' in the flowchart.
+        """
+        if selection is None or not selection.selected_skus:
+            return 0.0, False
+        logger.info("Evaluating old selection...")
+        selected_sku_ids = {sku.id for sku in selection.selected_skus}
+
+        # Identify orders affected by the current SKU selection.
+        # An order is affected if it contains at least one of the selected SKUs.
+        affected_order_ids = self.order_df[self.order_df['sku_id'].isin(selected_sku_ids)]['order_id'].unique()
+        original_affected_orders = self.order_df[self.order_df['order_id'].isin(affected_order_ids)].copy()
+        fulfillable_parts: pd.DataFrame = original_affected_orders[
+            original_affected_orders['sku_id'].isin(selected_sku_ids)]
+        complete_rate = 0
+        if len(affected_order_ids) != 0:
+            pass
+            # 1. Calculate the original total quantity and SKU variety for each affected order.
+            # This serves as the baseline for calculating completion rates.
+            original_order_agg = self.order_df.groupby('order_id').agg(
+                original_quantity=('quantity', 'sum'),
+                original_sku_count=('sku_id', 'nunique'),
+                date=('date', 'first')
+            ).reset_index()
+
+            # 2. calculate completed quantity and sku count
+            completed_agg = fulfillable_parts.groupby('order_id').agg(
+                completed_quantity=('quantity', 'sum'),
+                completed_sku_count=('sku_id', 'nunique')
+            ).reset_index()
+
+            #3. Merge original order data with actual completion data.
+            completion_df = pd.merge(original_order_agg, completed_agg, on='order_id', how='left')
+
+            #4. calculate complete rate
+            complete_rate = self._calculate_complete_rate(completion_df)
+        return complete_rate,False
+
+    def _calculate_complete_rate(self, completion_df: pd.DataFrame) -> float:
+        # For orders that had fulfillable parts but nothing was completed in the simulation, fill NaNs with 0.
+        completion_df[['completed_quantity', 'completed_sku_count']] = completion_df[
+            ['completed_quantity', 'completed_sku_count']].fillna(0)
+
+        # Calculate quantity and SKU completion rates for each order.
+        # Avoid division by zero, though original_quantity should not be zero.
+        completion_df['quantity_completion'] = completion_df['completed_quantity'] / completion_df['original_quantity']
+        completion_df['sku_completion'] = completion_df['completed_sku_count'] / completion_df['original_sku_count']
+
+        # Aggregate the completion rates by day to get daily averages.
+        daily_completion = completion_df.groupby('date').agg(
+            avg_quantity_completion=('quantity_completion', 'mean'),
+            avg_sku_completion=('sku_completion', 'mean')
+        ).reset_index()
+
+        # Calculate the final score as the mean of daily average completions, weighted.
+        final_quantity_completion = daily_completion['avg_quantity_completion'].mean()
+        final_sku_completion = daily_completion['avg_sku_completion'].mean()
+
+        complete_rate = final_quantity_completion * self.qty_comp_weight + final_sku_completion * (
+                1 - self.qty_comp_weight)
+        return complete_rate
 
     def simulate_warehouse_efficiency(self, selection: SelectionResult, data_type: str = "new", prefix="") -> Tuple[
         float, bool]:
@@ -87,7 +157,7 @@ class Evaluator:
 
         # 3. Simulate the completion of these fulfillable parts.
         # wait for simulate result
-        simulated_complete_df, is_full_load = self.simulate_order_completion(data_type,fulfillable_parts,
+        simulated_complete_df, is_full_load = self.simulate_order_completion_random(data_type,fulfillable_parts,
                                                                                     fulfillable_parts_file)
 
         # 4. Aggregate the simulated completion results by order.
@@ -104,27 +174,7 @@ class Evaluator:
             completion_df['completed_quantity'] = 0
             completion_df['completed_sku_count'] = 0
 
-        # For orders that had fulfillable parts but nothing was completed in the simulation, fill NaNs with 0.
-        completion_df[['completed_quantity', 'completed_sku_count']] = completion_df[
-            ['completed_quantity', 'completed_sku_count']].fillna(0)
-
-        # 6. Calculate quantity and SKU completion rates for each order.
-        # Avoid division by zero, though original_quantity should not be zero.
-        completion_df['quantity_completion'] = completion_df['completed_quantity'] / completion_df['original_quantity']
-        completion_df['sku_completion'] = completion_df['completed_sku_count'] / completion_df['original_sku_count']
-
-        # 7. Aggregate the completion rates by day to get daily averages.
-        daily_completion = completion_df.groupby('date').agg(
-            avg_quantity_completion=('quantity_completion', 'mean'),
-            avg_sku_completion=('sku_completion', 'mean')
-        ).reset_index()
-
-        # 8. Calculate the final score as the mean of daily average completions, weighted.
-        final_quantity_completion = daily_completion['avg_quantity_completion'].mean()
-        final_sku_completion = daily_completion['avg_sku_completion'].mean()
-
-        complete_rate = final_quantity_completion * self.qty_comp_weight + final_sku_completion * (
-                1 - self.qty_comp_weight)
+        complete_rate = self._calculate_complete_rate(completion_df)
         return complete_rate, is_full_load
 
     def should_switch(self, old_profit: float, new_profit: float, changeover_cost: float) -> bool:
@@ -167,7 +217,7 @@ class Evaluator:
         """
         fulfillable_parts.sort_values(by=["order_id", "date"]).to_excel(fulfillable_parts_file, index=False)
         logger.info(f"save {fulfillable_parts_file} successfully")
-
+        time.sleep(1)
         simulate_result_file = input(f"Please enter the {data_type} simulation result file: ")
         df = pd.read_excel(simulate_result_file, dtype={'Order Number': str,
                                                         'Material': str,

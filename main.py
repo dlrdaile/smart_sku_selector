@@ -101,17 +101,17 @@ def run_optimization_cycle(state: SystemState, pre_processor: PrimerDataPreProce
     state.previous_score = optimizer.new_scores_df['combined_score']
     state.previous_score_time = pre_processor.last_date
     # 4. Evaluation
-    logger.info("4. Evaluating new selection...")
     evaluate_config = default_config.get("evaluate_config", {})
     evaluator = Evaluator(pre_processor.fine_tune_structure_df, evaluate_config)
     now_time_str = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-    old_profit, is_full_load = evaluator.simulate_warehouse_efficiency(state.previous_selection, "old",
-                                                                       prefix=now_time_str)
+
+    old_profit, is_full_load = evaluator.calc_actual_complete_rate(state.previous_selection)
     # 当模拟仿真全部满负载时，说明旧的选品方案已经达到仓库运行的上限了，不需要再优化了
     if is_full_load:
         logger.info("旧的选品方案已经达到仓库运行的上限了，不需要再优化了")
         return state
 
+    logger.info("Evaluating new selection...")
     new_profit, is_full_load = evaluator.simulate_warehouse_efficiency(new_selection_result, "new", prefix=now_time_str)
     changeover_cost = evaluator.calculate_changeover_cost(state.previous_selection, new_selection_result)
     new_selection_result.profit = new_profit
