@@ -29,7 +29,7 @@ class Config:
             "qty_comp_weight": 0.6, # 计算订单完成率时品类完成率和箱数完成率的加权系数
             "switch_sku_time_use": 20, # 切换单个sku的时间成本，单位分钟
             "switch_sku_parallel": 8, # 切换sku过程的执行并发度
-            "simulate_order_data_cache_dir_path": r"D:\Code\Python\sku_select_optimize\data\fulfillable_parts", # 提供给仿真的运行订单数据缓存目录
+            "simulate_order_data_cache_dir_path": r"D:\Code\Python\sku_select_optimize\output\fulfillable_parts", # 提供给仿真的运行订单数据缓存目录
         }
     }
 
@@ -48,8 +48,8 @@ class Config:
 
     IS_DEBUG = False
 
-    DATA_STORAGE_PATH = "./data/storage.json"
+    DATA_STORAGE_PATH = "./output/storage.json"
     # 归档路径
-    DATA_STORAGE_ARCHIVE_PATH = "./data/storage_archive"
+    DATA_STORAGE_ARCHIVE_PATH = "./output/storage_archive"
 
 settings = Config()
