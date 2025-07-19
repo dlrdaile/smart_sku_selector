@@ -157,7 +157,7 @@ class Evaluator:
 
         # 3. Simulate the completion of these fulfillable parts.
         # wait for simulate result
-        simulated_complete_df, is_full_load = self.simulate_order_completion_random(data_type,fulfillable_parts,
+        simulated_complete_df, is_full_load = self.simulate_order_completion(data_type,fulfillable_parts,
                                                                                     fulfillable_parts_file)
 
         # 4. Aggregate the simulated completion results by order.
@@ -215,15 +215,32 @@ class Evaluator:
         would involve a more complex simulation engine. Here, we simulate that
         a random 95% of the selected order lines are completed successfully.
         """
-        fulfillable_parts.sort_values(by=["order_id", "date"]).to_excel(fulfillable_parts_file, index=False)
+        fulfillable_parts.rename(columns={
+            'order_id': 'Order Number',
+            'sku_id': 'Material',
+            'quantity': 'Case Picks',
+            'date': 'Date',
+        }).sort_values(by=["Order Number", "date"]).to_excel(fulfillable_parts_file, index=False)
         logger.info(f"save {fulfillable_parts_file} successfully")
         time.sleep(1)
         simulate_result_file = input(f"Please enter the {data_type} simulation result file: ")
-        df = pd.read_excel(simulate_result_file, dtype={'Order Number': str,
-                                                        'Material': str,
-                                                        'Case Picks': int,
-                                                        'Status': str,
-                                                        'CompleteTime': float})
+        simulate_result_file_path = Path(simulate_result_file)
+        while not simulate_result_file_path.exists():
+            logger.info(f"The simulation result file {simulate_result_file} does not exist.")
+            simulate_result_file = input(f"Please enter the {data_type} simulation result file: ")
+        if simulate_result_file_path.is_file():
+            df = pd.read_excel(simulate_result_file, dtype={'Order Number': str,
+                                                            'Material': str,
+                                                            'Case Picks': int,
+                                                            'Status': str,
+                                                            'CompleteTime': float})
+        else:
+            all_files = simulate_result_file_path.rglob("*.xlsx")
+            all_df = pd.DataFrame()
+            for file in all_files:
+                df = pd.read_excel(file)
+                all_df = pd.concat([all_df, df], ignore_index=True)
+            df = all_df
         df['Date'] = pd.to_datetime(df['Date'])
         df.rename(columns={
             'Date': 'date',

@@ -78,12 +78,15 @@ def run_optimization_cycle(state: SystemState, pre_processor: PrimerDataPreProce
     default_config = deepcopy(settings.SKU_OPTIMIZER_CONFIG)
     state = deepcopy(state)
     # 如果非debug模式，则开启ray超参数搜索
+    # settings.IS_DEBUG = True
     if not settings.IS_DEBUG:
         ray.init(include_dashboard=False)
         tuner = tune.Tuner(
             lambda config: tune_once_optimization(config,pre_processor,state),
             tune_config=tune.TuneConfig(
                 num_samples=20, # 搜寻的参数组合数量
+                max_concurrent_trials = 5,
+                reuse_actors = True,
                 scheduler=ASHAScheduler(metric="max_score", mode="max"), # best config 参考指标
                 trial_dirname_creator= lambda trial: f"{trial.trial_id}"
             ),
