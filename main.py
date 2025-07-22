@@ -3,8 +3,6 @@ import time
 from typing import Optional
 from pathlib import Path
 
-import pandas as pd
-import ray
 
 from store.data_store import DataStore
 from schema.models import SystemState
@@ -14,8 +12,6 @@ from model.pre_process.processor import PrimerDataPreProcess
 from loguru import logger
 from config.config import settings
 from copy import deepcopy
-from ray import train, tune
-from ray.tune.schedulers import ASHAScheduler
 
 ray_is_initialized = False
 
@@ -72,6 +68,28 @@ def tune_once_optimization(config, pre_processor, pre_state):
         return None
     return {"max_score": optimizer.selection_result.score}
 
+def get_best_config_with_ray(state: SystemState, pre_processor: PrimerDataPreProcess) -> Optional[dict]:
+    from ray import tune
+    from ray.tune.schedulers import ASHAScheduler
+    import ray
+
+    ray.init(include_dashboard=False, ignore_reinit_error=True)
+    tuner = tune.Tuner(
+        lambda config: tune_once_optimization(config, pre_processor, state),
+        tune_config=tune.TuneConfig(
+            num_samples=20,  # 搜寻的参数组合数量
+            max_concurrent_trials=5,
+            reuse_actors=True,
+            scheduler=ASHAScheduler(metric="max_score", mode="max"),  # best config 参考指标
+            trial_dirname_creator=lambda trial: f"{trial.trial_id}"
+        ),
+        param_space=settings.SEARCH_SPACE,  # 搜索空间配置
+    )
+    results = tuner.fit()
+    best_result = results.get_best_result("max_score", mode="max")
+    logger.info("\n--- Finished Optimization Cycle ---")
+    logger.info(f"best config: {best_result.config}")
+    return best_result.config
 
 def run_optimization_cycle(state: SystemState, pre_processor: PrimerDataPreProcess) -> Optional[SystemState]:
     """Runs one full cycle of the SKU optimization process."""
@@ -79,25 +97,8 @@ def run_optimization_cycle(state: SystemState, pre_processor: PrimerDataPreProce
     state = deepcopy(state)
     # 如果非debug模式，则开启ray超参数搜索
     # settings.IS_DEBUG = True
-    if not settings.IS_DEBUG:
-        ray.init(include_dashboard=False)
-        tuner = tune.Tuner(
-            lambda config: tune_once_optimization(config,pre_processor,state),
-            tune_config=tune.TuneConfig(
-                num_samples=20, # 搜寻的参数组合数量
-                max_concurrent_trials = 5,
-                reuse_actors = True,
-                scheduler=ASHAScheduler(metric="max_score", mode="max"), # best config 参考指标
-                trial_dirname_creator= lambda trial: f"{trial.trial_id}"
-            ),
-            param_space=settings.SEARCH_SPACE, # 搜索空间配置
-        )
-        results = tuner.fit()
-        best_result = results.get_best_result("max_score", mode="max")
-        logger.info("\n--- Finished Optimization Cycle ---")
-        logger.info(f"best config: {best_result.config}")
-
-        best_config = best_result.config
+    if not settings.IS_DEBUG and settings.IS_USE_RAY:
+        best_config = get_best_config_with_ray(state, pre_processor)
     else:
         best_config = None
     # 3. New Selection

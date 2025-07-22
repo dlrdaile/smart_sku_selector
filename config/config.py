@@ -48,6 +48,9 @@ class Config:
 
     IS_DEBUG = False
 
+
+    IS_USE_RAY = True # 是否使用ray
+
     DATA_STORAGE_PATH = "./output/storage.json"
     # 归档路径
     DATA_STORAGE_ARCHIVE_PATH = "./output/storage_archive"
