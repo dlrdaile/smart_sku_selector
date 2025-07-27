@@ -3,7 +3,8 @@ from schema.models import SKU, SelectionResult, SystemState
 import pandas as pd
 from model.rough_select.processor import RoughSelectProcessor
 from model.fine_select.solver import FineSelectProcessor
-
+import numpy as np
+from loguru import logger
 
 class SkuOptimizer:
     """Represents the black-box SKU selection algorithm."""
@@ -48,9 +49,15 @@ class SkuOptimizer:
                 pre_top_n_sku = previous_score_s.index[:pre_top_n].tolist()
                 rough_selected_skus = rough_selected_skus + pre_top_n_sku
         self.new_scores_df = new_scores_df
-        top_n = self.rough_config.get("top_n", 500)
-        top_n_skus = new_scores_df.sort_values(by="combined_score", ascending=False).index[:top_n].tolist()
+        top_n = int(self.rough_config.get("top_n", 500))
+        fine_tune_n = int(self.final_config.get("max_sku_count", 170))
+        all_index = new_scores_df.sort_values(by="combined_score", ascending=False).index.tolist()
+        top_n_skus = all_index[:top_n]
+        all_index_array = np.array(all_index[top_n:])
+        if fine_tune_n > top_n:
+            top_n_skus = np.random.choice(all_index_array,fine_tune_n - top_n,replace=False).tolist() + top_n_skus
         rough_selected_skus = rough_selected_skus + top_n_skus
+        logger.info(f"粗筛选共选中{len(set(rough_selected_skus))}个sku")
         # 去重
         rough_selected_skus = list(set(rough_selected_skus))
         return [SKU(sku) for sku in rough_selected_skus]
@@ -75,3 +82,8 @@ class SkuOptimizer:
             return self.selection_result
         else:
             return None
+
+    def get_random_select_result(self) -> Optional[SelectionResult]:
+        top_n_skus = self.new_scores_df.sample(170).index.tolist()
+        self.selection_result = SelectionResult(selected_skus=[SKU(sku) for sku in top_n_skus],score=0)
+        return self.selection_result

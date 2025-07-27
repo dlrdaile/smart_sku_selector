@@ -275,7 +275,7 @@ class FineSelectProcessor:
             }
 
             logger.info(f"优化完成，目标函数值: {self.objective_value:.4f}")
-            logger.info(f"选中 {len(self.selected_skus)} 个SKU")
+            logger.info(f"选中 {len(set(self.selected_skus))} 个SKU")
 
             # 计算订单满足率
             # self._calculate_order_fulfillment()

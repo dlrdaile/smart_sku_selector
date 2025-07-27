@@ -15,7 +15,7 @@ class Config:
             "cooc_weight" : 0.3, # 共现权重
             "quant_weight" : 0.3, # 数量权重
             "base_smart_ratio" : 0.5, # 基础评分与Smart评分的比例
-            "top_n" : 1000, # 前top_n个sku
+            "top_n" : 1200, # 前top_n个sku
         },
         "fine_config": {
             'max_sku_count': 170,  # 最大选品数量N
@@ -36,11 +36,12 @@ class Config:
     SEARCH_SPACE:dict = {
 
         # rough selection
-        "rough_config_alpha": tune.uniform(0.1, 0.5),
-        "rough_config_freq_weight": tune.uniform(0.2, 0.5),
-        "rough_config_cooc_weight": tune.uniform(0.2, 0.5),
-        "rough_config_quant_weight": tune.uniform(0.2, 0.5),
-        "rough_config_base_smart_ratio": tune.uniform(0.4, 0.6),
+        "rough_config_alpha": tune.uniform(0.1, 0.8),
+        "rough_config_freq_weight": tune.uniform(0.2, 0.8),
+        "rough_config_cooc_weight": tune.uniform(0.2, 0.8),
+        "rough_config_quant_weight": tune.uniform(0.2, 0.8),
+        "rough_config_base_smart_ratio": tune.uniform(0.3, 0.7),
+        # "rough_config_top_n": tune.uniform(1000, 1500),
 
         # fine selection
 

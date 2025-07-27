@@ -25,7 +25,8 @@ def get_config(config) -> dict:
     if "fine_config" not in default_config:
         default_config["fine_config"] = {}
     if type(config) == dict:
-        for key, value in default_config.items():
+        logger.debug(f"ray config: {config}")
+        for key, value in config.items():
             if key.startswith("rough_config_"):
                 actual_key = key.replace("rough_config_", "")
                 default_config["rough_config"][actual_key] = value
@@ -34,6 +35,7 @@ def get_config(config) -> dict:
                 default_config["fine_config"][actual_key] = value
             else:
                 default_config[key] = value
+    logger.debug(f"output config: {default_config}")
     return default_config
 
 
@@ -162,6 +164,7 @@ def main():
             try:
                 pre_processor = PrimerDataPreProcess(primer_data_path_list, sku_master_data_path, not settings.IS_DEBUG)
                 pre_processor.run()
+                # pre_processor.fine_tune_structure_df.to_csv("pre_processor.csv")
                 # Trigger the optimization cycle
                 state = DataStore.load_state()
                 state = run_optimization_cycle(state, pre_processor)

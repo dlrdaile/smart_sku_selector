@@ -157,7 +157,7 @@ class Evaluator:
 
         # 3. Simulate the completion of these fulfillable parts.
         # wait for simulate result
-        simulated_complete_df, is_full_load = self.simulate_order_completion_random(data_type,fulfillable_parts,
+        simulated_complete_df, is_full_load = self.simulate_order_completion(data_type,fulfillable_parts,
                                                                                     fulfillable_parts_file)
 
         # 4. Aggregate the simulated completion results by order.
